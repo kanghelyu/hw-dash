@@ -17,8 +17,12 @@
 from __future__ import annotations
 
 import faulthandler  # noqa: E402  段错误时打印 Python 调用栈（崩溃取证）
+import warnings
 
 faulthandler.enable()
+# Adw 1.9 起 MessageDialog 系 API 标记弃用（功能不变）；过滤掉以免污染取证日志
+warnings.filterwarnings("ignore", message=r".*Adw\..*is deprecated.*",
+                        category=DeprecationWarning)
 
 import json
 import math
