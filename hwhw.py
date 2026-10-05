@@ -192,19 +192,26 @@ def scan_sensors(overrides: dict | None = None) -> list[Sensor]:
 
 
 def find_fan_chip() -> str | None:
-    """找到带 pwm 通道的 it87 系 hwmon 目录（按 name 找，不硬编码 hwmonN —— 编号会随启动顺序变化）"""
+    """找到带 pwm 通道的风扇 hwmon 目录（按能力找，不硬编码 hwmonN —— 编号会随启动顺序变化）。
+
+    泛化：任何驱动暴露 pwmN + pwmN_enable 的芯片都算数（it87 / nct67xx /
+    nct6775 / …）；有多个时优先 it87 系（本应用对其语义验证最充分），
+    其余按名称排序取第一个。找不到返回 None，调用方按"无风扇控制"降级。
+    """
+    candidates = []
     for _hw, d, drv in _glob_hwmons():
-        if not drv.startswith("it8"):
-            continue
-        has_pwm = False
         try:
-            if any(re.fullmatch(r"pwm\d+", f) for f in os.listdir(d)):
-                has_pwm = True
+            files = os.listdir(d)
         except OSError:
-            pass
-        if has_pwm:
-            return d
-    return None
+            continue
+        has_pwm = any(re.fullmatch(r"pwm\d+", f) for f in files)
+        has_en = any(re.fullmatch(r"pwm\d+_enable", f) for f in files)
+        if has_pwm and has_en:
+            candidates.append((0 if drv.startswith("it8") else 1, drv, d))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda t: (t[0], t[1]))
+    return candidates[0][2]
 
 
 def scan_fans(chip_dir: str, state: dict | None = None) -> list[FanChannel]:
@@ -439,11 +446,37 @@ _IT8628_LABELS = {
 }
 
 
+def cpu_vendor() -> str:
+    """AuthenticAMD / GenuineIntel / 其他（读 /proc/cpuinfo，启动后缓存）。"""
+    global _CPU_VENDOR
+    if _CPU_VENDOR is None:
+        try:
+            with open("/proc/cpuinfo", encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if line.startswith("vendor_id"):
+                        _CPU_VENDOR = line.split(":")[-1].strip()
+                        break
+        except OSError:
+            pass
+        _CPU_VENDOR = _CPU_VENDOR or "unknown"
+    return _CPU_VENDOR
+
+
+_CPU_VENDOR = None
+
+
 def read_core_voltages() -> tuple[list[dict], str]:
     """每个逻辑 CPU 读 MSR 0x198 IA32_PERF_STATUS[47:32]（单位 1/8192 V）。
 
     需要 root（守护进程满足）。返回 (cores, first_error)。
+    泛化：MSR 0x198 是 Intel 语义；AMD/其他架构直接给出明确错误而不是
+    静默读出无意义数字。
     """
+    vendor = cpu_vendor()
+    if vendor != "GenuineIntel":
+        return [], (f"每核心电压（MSR 0x198）仅支持 Intel 处理器；"
+                    f"检测到 {vendor or '未知厂商'}，此页每核心部分不可用"
+                    f"（主板轨道不受影响）")
     try:
         vm = _voltmon()
         msr_reg, divisor = vm.MSR_PERF_STATUS, vm.MSR_VOLT_DIVISOR
@@ -571,3 +604,147 @@ def sysinfo() -> dict:
     except (OSError, subprocess.SubprocessError):
         pass
     return info
+
+
+# ------------------------------------------------------------------ 实时利用率
+
+_CPU_TICKS: tuple[int, int] | None = None   # (idle, total) 上次 /proc/stat 快照
+
+
+def read_cpu_util() -> float | None:
+    """整机 CPU 利用率（%），由 /proc/stat 相邻两次采样差值计算。
+
+    守护进程按固定节奏轮询，天然构成采样对；第一次调用返回 None。
+    """
+    global _CPU_TICKS
+    try:
+        with open("/proc/stat", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("cpu "):
+                    parts = [int(x) for x in line.split()[1:9]]
+                    idle = parts[3] + parts[4]          # idle + iowait
+                    total = sum(parts)
+                    break
+            else:
+                return None
+    except (OSError, ValueError):
+        return None
+    if _CPU_TICKS is None:
+        _CPU_TICKS = (idle, total)
+        return None
+    d_idle, d_total = idle - _CPU_TICKS[0], total - _CPU_TICKS[1]
+    _CPU_TICKS = (idle, total)
+    if d_total <= 0:
+        return None
+    return max(0.0, min(100.0, (1.0 - d_idle / d_total) * 100.0))
+
+
+def read_mem() -> dict | None:
+    """内存占用（MemAvailable 语义，与 free/free -m 一致）。"""
+    try:
+        info = {}
+        with open("/proc/meminfo", encoding="utf-8") as fh:
+            for line in fh:
+                key, _, val = line.partition(":")
+                info[key.strip()] = int(val.strip().split()[0])  # kB
+    except (OSError, ValueError, IndexError):
+        return None
+    total = info.get("MemTotal", 0)
+    avail = info.get("MemAvailable", 0)
+    if not total:
+        return None
+    used = total - avail
+    return {"total_mb": total // 1024, "used_mb": used // 1024,
+            "percent": round(used / total * 100, 1),
+            "swap_total_mb": info.get("SwapTotal", 0) // 1024,
+            "swap_used_mb": (info.get("SwapTotal", 0) - info.get("SwapFree", 0)) // 1024}
+
+
+def read_gpus() -> list[dict]:
+    """尽量枚举独立/核显：NVIDIA（nvidia-smi）、amdgpu、i915。全都没有就返回 []。
+
+    每项：{name, util_percent, temp, core_mhz, mem_mhz, vram_used_mb, vram_total_mb}
+    缺哪个字段就是 None —— 界面按需显示，不猜测。
+    """
+    out: list[dict] = []
+    import shutil
+    import subprocess
+    # ---- NVIDIA
+    if shutil.which("nvidia-smi"):
+        try:
+            r = subprocess.run(
+                ["nvidia-smi",
+                 "--query-gpu=name,temperature.gpu,utilization.gpu,memory.used,"
+                 "memory.total,clocks.gr,clocks.mem",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5)
+            for line in r.stdout.strip().splitlines():
+                p = [x.strip() for x in line.split(",")]
+                if len(p) >= 7:
+                    def _f(v):
+                        try:
+                            return float(v)
+                        except ValueError:
+                            return None
+                    out.append({"name": p[0], "vendor": "NVIDIA",
+                                "temp": _f(p[1]), "util_percent": _f(p[2]),
+                                "vram_used_mb": _f(p[3]), "vram_total_mb": _f(p[4]),
+                                "core_mhz": _f(p[5]), "mem_mhz": _f(p[6])})
+        except (OSError, subprocess.SubprocessError):
+            pass
+    # ---- amdgpu / i915 / xe（sysfs 尽力而为）
+    try:
+        cards = sorted(os.listdir("/sys/class/drm"))
+    except OSError:
+        cards = []
+    for card in cards:
+        if not card.startswith("card") or card.endswith("._dev_") :
+            continue
+        base = f"/sys/class/drm/{card}"
+        try:
+            vendor = open(os.path.join(base, "device/vendor"), encoding="utf-8").read().strip()
+        except OSError:
+            continue
+        if vendor == "0x1002":          # AMD
+            item = {"name": "AMD GPU", "vendor": "AMD", "card": card}
+            try:
+                item["util_percent"] = float(open(os.path.join(
+                    base, "device/gpu_busy_percent"), encoding="utf-8").read().strip())
+            except (OSError, ValueError):
+                pass
+            try:
+                for ln in open(os.path.join(base, "device/pp_dpm_sclk"), encoding="utf-8"):
+                    if ln.rstrip().endswith("*"):
+                        item["core_mhz"] = float(ln.split(":")[1].replace("Mhz", "").strip())
+            except (OSError, ValueError, IndexError):
+                pass
+            try:
+                for ln in open(os.path.join(base, "device/pp_dpm_mclk"), encoding="utf-8"):
+                    if ln.rstrip().endswith("*"):
+                        item["mem_mhz"] = float(ln.split(":")[1].replace("Mhz", "").strip())
+            except (OSError, ValueError, IndexError):
+                pass
+            try:
+                item["vram_used_mb"] = int(open(os.path.join(
+                    base, "device/mem_info_vram_used"), encoding="utf-8").read()) // 1048576
+                item["vram_total_mb"] = int(open(os.path.join(
+                    base, "device/mem_info_vram_total"), encoding="utf-8").read()) // 1048576
+            except (OSError, ValueError):
+                pass
+            out.append(item)
+        elif vendor == "0x8086":        # Intel 核显
+            item = {"name": "Intel iGPU", "vendor": "Intel", "card": card}
+            for f in ("gt_cur_freq_mhz", "gt0/rp0_freq_mhz"):
+                try:
+                    item["core_mhz"] = float(open(os.path.join(
+                        base, "device", f), encoding="utf-8").read().strip())
+                    break
+                except (OSError, ValueError):
+                    continue
+            out.append(item)
+    return out
+
+
+def read_live() -> dict:
+    """一次抓齐"实时利用率"块：CPU / 内存 / GPU。全部尽力而为，缺就缺。"""
+    return {"cpu_util": read_cpu_util(), "mem": read_mem(), "gpus": read_gpus()}

@@ -41,6 +41,106 @@ gi.require_version("Adw", "1")
 gi.require_foreign("cairo")
 from gi.repository import Adw, Gdk, Gio, GLib, Gsk, Gtk  # noqa: E402
 
+# ------------------------------------------------------------------ 双语 UI
+_LANG_PATH = os.path.expanduser("~/.config/hw-dash/lang")
+_LANG = "zh"
+try:
+    _raw = open(_LANG_PATH, encoding="utf-8").read().strip()
+    _LANG = _raw if _raw in ("zh", "en") else "zh"
+except OSError:
+    pass
+
+def T(s: str) -> str:
+    """界面双语：中文为源串；英文模式查表，缺条目回退中文。"""
+    return _EN.get(s, s) if _LANG == "en" else s
+
+def current_lang() -> str:
+    return _LANG
+
+def set_lang(lang: str) -> None:
+    global _LANG
+    _LANG = lang if lang in ("zh", "en") else "zh"
+    try:
+        os.makedirs(os.path.dirname(_LANG_PATH), exist_ok=True)
+        with open(_LANG_PATH, "w", encoding="utf-8") as fh:
+            fh.write(_LANG)
+    except OSError:
+        pass
+
+def _lang_btn_label() -> str:
+    return "EN / 中文" if _LANG == "zh" else "中文 / EN"
+
+_EN = {
+    "硬件面板": "Hardware Panel",
+    "温度": "Temps", "风扇": "Fans", "电压": "Voltage", "信息": "Info", "灯光": "Lighting",
+    "使用前请阅读": "Please read before use",
+    "本面板可以接管风扇转速、修改灯光状态。请知悉：\n\n"
+    "· 风扇曲线 / 手动模式会接管散热 —— 请确保调速合理、温度监控正常；"
+    "过热时硬件会降频甚至强制关机保护，但长期高温会加速老化\n"
+    "· 本软件按现状提供，作者不对因使用或误用造成的任何硬件或数据问题负责\n"
+    "· 电压 / 温度 / 频率等只读功能没有风险":
+    "This panel can take over fan speed and change lighting state. Please note:\n\n"
+    "· Curve / manual fan modes take over cooling — keep speeds sane and watch "
+    "temperatures; overheating triggers throttling or forced shutdown, but sustained "
+    "heat ages hardware faster\n"
+    "· This software is provided as-is; the author is not liable for any hardware or "
+    "data damage caused by use or misuse\n"
+    "· Read-only features (voltage / temperature / frequency) carry no risk",
+    "退出": "Quit", "我已了解，继续使用": "I understand, continue",
+    "守护进程未运行 —— 只读模式（风扇与灯光不可调）。": "Daemon offline — read-only mode (fans & lighting disabled).",
+    "启动：sudo systemctl start hwdashd": "Start: sudo systemctl start hwdashd",
+    "点击行或图例芯片可切换该路曲线的显示": "Click a row or legend chip to toggle that curve",
+    "风扇通道": "Fan channels", "全部交还 BIOS": "Return all to BIOS",
+    "已全部交还 BIOS": "All fans returned to BIOS", "失败": "Failed",
+    "⚠ 曲线 / 手动模式会接管风扇转速：调低前请确认散热与温度监控正常，过热由硬件降频、强制关机兜底，但长期高温会加速老化":
+    "⚠ Curve / manual modes take over fan speed — verify cooling and temps before dialing down; hardware throttling and forced shutdown are the last line of defense, but sustained heat ages hardware faster",
+    "该通道没有转速回读 —— 排针上可能没接风扇": "No tach feedback on this channel — nothing may be connected",
+    "此刻目标": "Target now", "实际写入": "applied",
+    "拖锚点实时生效 · 点空白加点 · 右键删点": "Drag anchors for live effect · click blank to add · right-click to delete",
+    "BIOS 自动": "BIOS auto", "曲线调速": "Curve", "手动固定": "Manual", "占空比": "Duty",
+    "每核心电压（MSR 0x198）+ VCore 曲线 + 主板电压轨道（voltmon 同源）。":
+    "Per-core voltage (MSR 0x198) + VCore curve + motherboard rails (voltmon-sourced).",
+    "主板电压轨道": "Motherboard voltage rails",
+    "主板 Super-I/O ADC · 与基准测试台同源 · 报警位可能不可信":
+    "Motherboard Super-I/O ADC · same source as the bench · alarm flags may be unreliable",
+    "与基准测试台同源 · 报警位可能不可信": "same source as the bench · alarm flags may be unreliable",
+    "没有可用的 MSR 读数": "No MSR readings available", "每核心电压不可用": "Per-core voltage unavailable",
+    "平均": "avg", "会话": "session", "限值": "limits",
+    "报警中": "ALARMING", "报警位不可信": "alarm flag unreliable",
+    "无参数": "no params", "速度": "Speed", "亮度": "Brightness", "方向": "Direction",
+    "随机颜色": "random colors", "逐颗颜色": "per-LED color",
+    "处理器": "CPU", "内存": "Memory", "实时占用": "Live usage",
+    "CPU 利用率": "CPU utilization",
+    "读不到 cpufreq 频率": "cpufreq not readable",
+    "实时频率 · 最低": "Live clocks · min", "平均": "avg", "最高": "max",
+    "未检测到独显/核显遥测": "no GPU telemetry detected",
+    "核心": "core", "显存": "VRAM", "占用": "util",
+    "（无）": "(none)", "未读出内存信息": "no memory info", "实时时钟": "real clock",
+    "灯珠": "LEDs", "点击或拖拽灯珠上色（自动切换到 Direct 模式）":
+    "Click or drag LEDs to paint (auto-switches to Direct mode)",
+    "画笔": "Brush", "粗细": "Size", "填充": "Fill", "清除": "Clear", "彩虹": "Rainbow",
+    "所有灯珠 = 画笔色": "All LEDs = brush color", "所有灯珠熄灭": "All LEDs off",
+    "全设备彩虹渐变": "Rainbow gradient across the device",
+    "模式": "Modes", "选中即生效（OpenRGB 语义）": "Selecting applies instantly (OpenRGB semantics)",
+    "把当前状态另存为配置档": "Save current state as a profile",
+    "删除选中的配置档": "Delete the selected profile",
+    "配置档": "Profile", "保存配置档": "Save profile",
+    "把当前所有设备的灯光状态保存为 OpenRGB 配置档。": "Save all devices' lighting state as an OpenRGB profile.",
+    "取消": "Cancel", "保存": "Save", "已保存配置档": "Profile saved",
+    "保存失败": "Save failed", "没有可删除的配置档": "No profile to delete",
+    "已删除": "Deleted", "删除失败": "Delete failed", "加载配置档失败": "Profile load failed",
+    "模式下发失败": "Mode apply failed", "没有可用的灯光设备": "No lighting devices available",
+    "灯光不可用": "Lighting unavailable", "未知原因": "unknown reason", "未知": "unknown",
+    "向左": "Left", "向右": "Right", "向上": "Up", "向下": "Down",
+    "水平": "Horizontal", "垂直": "Vertical", "颜色": "Colors", "无模式信息": "No mode info",
+        "（无配置档）": "(no profiles)", "颗": "LED(s)",
+    "CPU_FAN": "CPU_FAN", "CPU_OPT / 水泵": "CPU_OPT / Pump",
+    "SYS_FAN 1": "SYS_FAN 1", "SYS_FAN 2": "SYS_FAN 2", "SYS_FAN 3": "SYS_FAN 3",
+    "SYS_FAN / 水泵": "SYS_FAN / Pump",
+    "当前": "now", "亮圈锚点决定此刻转速": "the highlighted anchor sets the speed right now",
+    "占空比固定，BIOS 不再参与": "Duty fixed; BIOS no longer participates",
+}
+
 API = "http://127.0.0.1:8788"
 POLL_SEC = 2.0
 SNAPSHOT_DIR = None
@@ -407,7 +507,7 @@ class TempPage(Gtk.Box):
 
         # ---- 传感器列表
         group = Adw.PreferencesGroup(title="传感器",
-                                     description="点击行或图例芯片可切换该路曲线的显示")
+                                     description=T("点击行或图例芯片可切换该路曲线的显示"))
         self.listbox = Gtk.ListBox()
         self.listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         self.listbox.add_css_class("boxed-list")
@@ -429,8 +529,8 @@ class TempPage(Gtk.Box):
                                 body=f"{key} · 仅影响显示，不影响硬件")
         entry = Gtk.Entry(text=row.get_title())
         dlg.set_extra_child(entry)
-        dlg.add_response("cancel", "取消")
-        dlg.add_response("ok", "保存")
+        dlg.add_response("cancel", T("取消"))
+        dlg.add_response("ok", T("保存"))
         dlg.set_default_response("ok")
 
         def on_resp(_d, resp):
@@ -744,14 +844,15 @@ class CurveEditor(Gtk.DrawingArea):
 # ------------------------------------------------------------------ 风扇页
 
 MODE_NAMES = ["bios", "curve", "manual"]
-MODE_LABELS = ["BIOS 自动", "曲线调速", "手动固定"]
+def _mode_labels():
+    return [T("BIOS 自动"), T("曲线调速"), T("手动固定")]
 
 
 def _make_mode_switch(cur: str, on_change):
     """优先用 Adw.ToggleGroup（分段控件），老版本回退 DropDown。"""
     if hasattr(Adw, "ToggleGroup"):
         g = Adw.ToggleGroup()
-        for name, label in zip(MODE_NAMES, MODE_LABELS):
+        for name, label in zip(MODE_NAMES, _mode_labels()):
             tg = Adw.Toggle()
             tg.set_name(name)
             tg.set_label(label)
@@ -762,7 +863,7 @@ def _make_mode_switch(cur: str, on_change):
             on_change(g.get_active_name())
         g.connect("notify::active-name", changed)
         return g, (lambda: g.get_active_name()), (lambda m: g.set_active_name(m))
-    dd = Gtk.DropDown.new_from_strings(MODE_LABELS)
+    dd = Gtk.DropDown.new_from_strings(_mode_labels())
     dd.set_selected(MODE_NAMES.index(cur) if cur in MODE_NAMES else 0)
 
     def changed(_g, _ps):
@@ -813,7 +914,7 @@ class FanCard(Gtk.Box):
 
         # 手动滑杆
         self.manual_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        self.manual_row.append(Gtk.Label(label="占空比", xalign=0))
+        self.manual_row.append(Gtk.Label(label=T("占空比"), xalign=0))
         self.manual_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 255, 5)
         self.manual_scale.set_hexpand(True)
         self.manual_scale.set_draw_value(False)
@@ -883,16 +984,16 @@ class FanCard(Gtk.Box):
             ct = (API_._last_state or {}).get("cpu_temp")
             tgt = fan.get("curve_duty_now")
             if ct is not None:
-                notes.append(f"CPU 当前 {ct:.0f}°C，亮圈锚点决定此刻转速")
+                notes.append(f"CPU {T('当前')} {ct:.0f}°C，{T('亮圈锚点决定此刻转速')}")
             if tgt is not None:
-                notes.append(f"此刻目标 {tgt * 100 // 255}%，实际写入 {duty * 100 // 255}%")
-            notes.append("拖锚点实时生效 · 点空白加点 · 右键删点")
+                notes.append(f"{T('此刻目标')} {tgt * 100 // 255}%，{T('实际写入')} {duty * 100 // 255}%")
+            notes.append(T("拖锚点实时生效 · 点空白加点 · 右键删点"))
         elif mode == "manual":
-            notes.append("占空比固定，BIOS 不再参与")
+            notes.append(T("占空比固定，BIOS 不再参与"))
         else:
             notes.append("由主板 Smart Fan 接管 —— 切到「曲线」即可拖折点调速")
         if not has:
-            notes.append("该通道没有转速回读 —— 排针上可能没接风扇")
+            notes.append(T("该通道没有转速回读 —— 排针上可能没接风扇"))
         self.hint.set_text("  ·  ".join(notes))
 
 
@@ -903,14 +1004,22 @@ class FanPage(Gtk.Box):
         self._mode_pending: dict[int, str] = {}
 
         head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        title = Gtk.Label(label="风扇通道", xalign=0, hexpand=True)
+        title = Gtk.Label(label=T("风扇通道"), xalign=0, hexpand=True)
         title.add_css_class("heading")
         head.append(title)
-        btn = Gtk.Button(label="全部交还 BIOS")
+        btn = Gtk.Button(label=T("全部交还 BIOS"))
         btn.add_css_class("destructive-action")
         btn.connect("clicked", self._all_bios)
         head.append(btn)
         self.append(head)
+
+        warn = Gtk.Label(
+            label=T("⚠ 曲线 / 手动模式会接管风扇转速：调低前请确认散热与温度监控正常，"
+                 "过热由硬件降频、强制关机兜底，但长期高温会加速老化"),
+            xalign=0, wrap=True)
+        warn.add_css_class("hw-cap")
+        warn.set_opacity(0.75)
+        self.append(warn)
 
         sc = Gtk.ScrolledWindow(vexpand=True)
         sc.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -930,8 +1039,8 @@ class FanPage(Gtk.Box):
         # 全部走工作线程：主线程同步 HTTP 会冻结整个 UI（风扇调速卡顿感的元凶）
         def done(res):
             ok = not isinstance(res, Exception) and res[0]
-            self.toast("已全部交还 BIOS" if ok else
-                       f"失败：{res if isinstance(res, Exception) else res[1]}")
+            self.toast(T("已全部交还 BIOS") if ok else
+                       f"{T('失败')}：{res if isinstance(res, Exception) else res[1]}")
         run_async(lambda: API_.post("/api/fans/all-bios", {}), done)
 
     def _on_mode(self, n, mode):
@@ -993,20 +1102,23 @@ def _flags_summary(flags: int) -> str:
     if flags & MF_RANDOM:
         parts.append("随机颜色")
     if flags & MF_PERLED:
-        parts.append("逐颗颜色")
+        parts.append(T("逐颗颜色"))
     if flags & (MF_DIR_LR | MF_DIR_UD | MF_DIR_HV):
-        parts.append("方向")
-    return " · ".join(parts) or "无参数"
+        parts.append(T("方向"))
+    return " · ".join(parts) or T("无参数")
 
 
 class LedStrip(Gtk.DrawingArea):
     """一个灯区的逐颗视图（OpenRGB 的 LED 块条）：点击 / 拖拽用画笔上色。"""
 
-    def __init__(self, page, zone: dict):
+    def __init__(self, page, zone: dict, base: int):
         super().__init__()
         self.page = page
         self.zone = zone
-        self.base = zone["leds_min"]
+        # base 必须是本区在全设备灯序里的累计起始偏移。zone["leds_min"] 是
+        # "最小灯数"（OpenRGB 语义），绝大多数主板它不等于偏移——拿它当
+        # base 会让第 2 条开始的灯区点画到别的区上（点了没反应）。
+        self.base = max(0, int(base))
         self.count = max(1, zone["leds_count"])
         self.set_size_request(-1, 34)
         self.set_hexpand(True)
@@ -1150,14 +1262,14 @@ class ColorPage(Gtk.Box):
         devcard.append(head)
 
         prow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        prow.append(Gtk.Label(label="配置档", xalign=0))
+        prow.append(Gtk.Label(label=T("配置档"), xalign=0))
         self.profile_dd = Gtk.DropDown.new_from_strings(["（无）"])
         self.profile_dd.set_size_request(180, -1)
         self.profile_dd.set_hexpand(True)
         self.profile_dd.connect("notify::selected", self._on_profile_selected)
         prow.append(self.profile_dd)
-        for icon, tip, fn in (("document-save-symbolic", "把当前状态另存为配置档", self._profile_save),
-                              ("user-trash-symbolic", "删除选中的配置档", self._profile_delete)):
+        for icon, tip, fn in ((T("document-save-symbolic"), T("把当前状态另存为配置档"), self._profile_save),
+                              (T("user-trash-symbolic"), T("删除选中的配置档"), self._profile_delete)):
             b = Gtk.Button(icon_name=icon)
             b.add_css_class("flat")
             b.set_tooltip_text(tip)
@@ -1170,17 +1282,17 @@ class ColorPage(Gtk.Box):
         ledcard = self._card()
         self.box.append(ledcard)
         lh = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        lt = Gtk.Label(label="灯珠", xalign=0)
+        lt = Gtk.Label(label=T("灯珠"), xalign=0)
         lt.add_css_class("heading")
         lh.append(lt)
-        lsub = Gtk.Label(label="点击或拖拽灯珠上色（自动切换到 Direct 模式）",
+        lsub = Gtk.Label(label=T("点击或拖拽灯珠上色（自动切换到 Direct 模式）"),
                          xalign=0, hexpand=True, ellipsize=3)
         lsub.add_css_class("hw-cap")
         lh.append(lsub)
         ledcard.append(lh)
 
         tools = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        tools.append(Gtk.Label(label="画笔", xalign=0))
+        tools.append(Gtk.Label(label=T("画笔"), xalign=0))
         self.brush_btn = Gtk.ColorDialogButton()
         rgba = Gdk.RGBA()
         rgba.parse(f"#{self.brush_color}")
@@ -1201,7 +1313,7 @@ class ColorPage(Gtk.Box):
             sw.set_tooltip_text(hx)
             sw.connect("clicked", lambda _b, hx=hx: self._set_brush(hx))
             tools.append(sw)
-        size_l = Gtk.Label(label="粗细", xalign=0, margin_start=6)
+        size_l = Gtk.Label(label=T("粗细"), xalign=0, margin_start=6)
         tools.append(size_l)
         self.size_tg = Adw.ToggleGroup()
         for s in ("1", "2", "3"):
@@ -1210,9 +1322,9 @@ class ColorPage(Gtk.Box):
         self.size_tg.set_active(0)
         self.size_tg.connect("notify::active", self._on_size_changed)
         tools.append(self.size_tg)
-        for label, fn, tip in (("填充", self._fill_brush, "所有灯珠 = 画笔色"),
-                               ("清除", self._fill_black, "所有灯珠熄灭"),
-                               ("彩虹", self._fill_rainbow, "全设备彩虹渐变")):
+        for label, fn, tip in ((T("填充"), self._fill_brush, T("所有灯珠 = 画笔色")),
+                               (T("清除"), self._fill_black, T("所有灯珠熄灭")),
+                               (T("彩虹"), self._fill_rainbow, T("全设备彩虹渐变"))):
             b = Gtk.Button(label=label)
             b.add_css_class("flat")
             b.set_tooltip_text(tip)
@@ -1228,10 +1340,10 @@ class ColorPage(Gtk.Box):
         modecard = self._card()
         self.box.append(modecard)
         mh = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        mt = Gtk.Label(label="模式", xalign=0)
+        mt = Gtk.Label(label=T("模式"), xalign=0)
         mt.add_css_class("heading")
         mh.append(mt)
-        msub = Gtk.Label(label="选中即生效（OpenRGB 语义）", xalign=0, hexpand=True, ellipsize=3)
+        msub = Gtk.Label(label=T("选中即生效（OpenRGB 语义）"), xalign=0, hexpand=True, ellipsize=3)
         msub.add_css_class("hw-cap")
         mh.append(msub)
         modecard.append(mh)
@@ -1287,14 +1399,14 @@ class ColorPage(Gtk.Box):
         if isinstance(info, Exception):
             info = {"ok": False, "error": str(info)}
         if not info.get("ok"):
-            self.banner.set_title(f"灯光不可用：{info.get('error', '未知原因')}")
+            self.banner.set_title(f"{T('灯光不可用')}：{info.get('error', T('未知原因'))}")
             self.banner.set_revealed(True)
             return
         self.banner.set_revealed(False)
         self.devices = info.get("devices", [])
         self.profiles = info.get("profiles", [])
         if not self.devices:
-            self.banner.set_title("没有可用的灯光设备")
+            self.banner.set_title(T("没有可用的灯光设备"))
             self.banner.set_revealed(True)
             return
         self.dev_idx = min(self.dev_idx, len(self.devices) - 1)
@@ -1313,6 +1425,7 @@ class ColorPage(Gtk.Box):
             # 灯区（摘挂 + 延迟销毁，见 _drain_box 说明）
             _drop_later(_drain_box(self.zones_box))
             self._zone_strips = []
+            _zone_base = 0
             for z in dev.get("zones", []):
                 zb = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
                 h = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1327,12 +1440,13 @@ class ColorPage(Gtk.Box):
                     hl.add_css_class("hw-cap")
                     hl.set_opacity(0.7)
                     h.append(hl)
-                cnt = Gtk.Label(label=f"{z['leds_count']} 颗", xalign=1)
+                cnt = Gtk.Label(label=f"{z['leds_count']} {T('颗')}", xalign=1)
                 cnt.add_css_class("hw-cap")
                 cnt.set_opacity(0.7)
                 h.append(cnt)
                 zb.append(h)
-                strip = LedStrip(self, z)
+                strip = LedStrip(self, z, _zone_base)
+                _zone_base += int(z["leds_count"])
                 self._zone_strips.append(strip)
                 zb.append(strip)
                 self.zones_box.append(zb)
@@ -1404,7 +1518,7 @@ class ColorPage(Gtk.Box):
         _drop_later(_drain_box(self.param_box))
         m = self._cur_mode()
         if not m:
-            lbl = Gtk.Label(label="无模式信息", xalign=0)
+            lbl = Gtk.Label(label=T("无模式信息"), xalign=0)
             lbl.add_css_class("hw-cap")
             self.param_box.append(lbl)
             return
@@ -1474,11 +1588,11 @@ class ColorPage(Gtk.Box):
         tg = Adw.ToggleGroup()
         opts = []
         if dir_flags & MF_DIR_LR:
-            opts += [(0, "向左"), (1, "向右")]
+            opts += [(0, T("向左")), (1, T("向右"))]
         if dir_flags & MF_DIR_HV:
-            opts += [(4, "水平"), (5, "垂直")]
+            opts += [(4, T("水平")), (5, T("垂直"))]
         if dir_flags & MF_DIR_UD:
-            opts += [(2, "向上"), (3, "向下")]
+            opts += [(2, T("向上")), (3, T("向下"))]
         for val, name in opts:
             t = Adw.Toggle(label=name)
             tg.add(t)
@@ -1634,12 +1748,12 @@ class ColorPage(Gtk.Box):
 
     def _profile_save(self, *_):
         dlg = Adw.MessageDialog(transient_for=self.get_root(),
-                                heading="保存配置档",
-                                body="把当前所有设备的灯光状态保存为 OpenRGB 配置档。")
+                                heading=T("保存配置档"),
+                                body=T("把当前所有设备的灯光状态保存为 OpenRGB 配置档。"))
         entry = Gtk.Entry(text="hw-dash", hexpand=True)
         dlg.set_extra_child(entry)
-        dlg.add_response("cancel", "取消")
-        dlg.add_response("ok", "保存")
+        dlg.add_response("cancel", T("取消"))
+        dlg.add_response("ok", T("保存"))
         dlg.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
         dlg.set_default_response("ok")
 
@@ -1648,8 +1762,8 @@ class ColorPage(Gtk.Box):
             if r == "ok" and name:
                 def done(res):
                     ok = not isinstance(res, Exception) and res[0]
-                    self.toast("已保存配置档" if ok else
-                               f"保存失败：{res if isinstance(res, Exception) else res[1]}")
+                    self.toast(T("已保存配置档") if ok else
+                               f"{T('保存失败')}：{res if isinstance(res, Exception) else res[1]}")
                     if ok:
                         self.refresh(force=True)
                 run_async(lambda: API_.post("/api/rgb/profile",
@@ -1661,13 +1775,13 @@ class ColorPage(Gtk.Box):
     def _profile_delete(self, *_):
         i = self.profile_dd.get_selected()
         if not self.profiles or i < 0 or i >= len(self.profiles):
-            self.toast("没有可删除的配置档")
+            self.toast(T("没有可删除的配置档"))
             return
         name = self.profiles[i]
         def done(res):
             ok = not isinstance(res, Exception) and res[0]
-            self.toast("已删除" if ok else
-                       f"删除失败：{res if isinstance(res, Exception) else res[1]}")
+            self.toast(T("已删除") if ok else
+                       f"{T('删除失败')}：{res if isinstance(res, Exception) else res[1]}")
             if ok:
                 self.refresh(force=True)
         run_async(lambda: API_.post("/api/rgb/profile",
@@ -1702,7 +1816,7 @@ class InfoPage(Gtk.Box):
         cpu_card.add_css_class("card")
         cpu_card.add_css_class("hw-card-pad")
         h = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        t = Gtk.Label(label="处理器", xalign=0)
+        t = Gtk.Label(label=T("处理器"), xalign=0)
         t.add_css_class("heading")
         h.append(t)
         self.cpu_model_lbl = Gtk.Label(label="…", xalign=1, hexpand=True, ellipsize=1)
@@ -1722,12 +1836,47 @@ class InfoPage(Gtk.Box):
         cpu_card.append(self.freq_meta)
         wrap.append(cpu_card)
 
+        # ---- 实时占用（CPU / 内存 / GPU，全部尽力而为）
+        live_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        live_card.add_css_class("card")
+        live_card.add_css_class("hw-card-pad")
+        hl = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        tl = Gtk.Label(label=T("实时占用"), xalign=0)
+        tl.add_css_class("heading")
+        hl.append(tl)
+        self.live_meta = Gtk.Label(label="", xalign=1, hexpand=True)
+        self.live_meta.add_css_class("hw-cap")
+        hl.append(self.live_meta)
+        live_card.append(hl)
+
+        def _bar_row(title: str):
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            lbl = Gtk.Label(label=f"{T(title)} —", xalign=0)
+            lbl.add_css_class("hw-cap")
+            box.append(lbl)
+            bar = Gtk.ProgressBar()
+            bar.set_show_text(False)
+            box.append(bar)
+            live_card.append(box)
+            return lbl, bar
+
+        self.cpu_lbl, self.cpu_bar = _bar_row("CPU 利用率")
+        self.mem_lbl, self.mem_bar = _bar_row("内存")
+        self.gpu_list = Gtk.ListBox()
+        self.gpu_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.gpu_list.add_css_class("boxed-list")
+        self.gpu_list.set_visible(False)
+        live_card.append(self.gpu_list)
+        self._gpu_rows: dict[str, Gtk.Label] = {}
+        self._live_first = True
+        wrap.append(live_card)
+
         # ---- 内存
         mem_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         mem_card.add_css_class("card")
         mem_card.add_css_class("hw-card-pad")
         h2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        t2 = Gtk.Label(label="内存", xalign=0)
+        t2 = Gtk.Label(label=T("内存"), xalign=0)
         t2.add_css_class("heading")
         h2.append(t2)
         self.mem_total_lbl = Gtk.Label(label="…", xalign=1, hexpand=True)
@@ -1799,11 +1948,63 @@ class InfoPage(Gtk.Box):
             self.sys_list.append(Adw.ActionRow(title=name, subtitle="GPU · " + g.split(":", 1)[0]))
 
     # -- 实时频率 -----------------------------------------------------------
+    def _update_live(self, st: dict):
+        """实时占用：CPU 利用率 / 内存 / GPU（NVIDIA · AMD · Intel，缺啥显示啥）。"""
+        live = st.get("live") or {}
+
+        def pct_txt(v):
+            return f"{v:.0f}%" if isinstance(v, (int, float)) else "—"
+
+        cu = live.get("cpu_util")
+        if isinstance(cu, (int, float)):
+            self.cpu_bar.set_fraction(max(0.0, min(1.0, cu / 100.0)))
+            self.cpu_lbl.set_text(f"{T('CPU 利用率')}　{cu:.0f}%")
+        mem = live.get("mem")
+        if isinstance(mem, dict) and mem.get("total_mb"):
+            self.mem_bar.set_fraction(max(0.0, min(1.0, mem["used_mb"] / mem["total_mb"])))
+            self.mem_lbl.set_text(f"{T('内存')}　{mem['used_mb']} / {mem['total_mb']} MB"
+                                  f"（{mem['percent']:.0f}%）")
+        gpus = live.get("gpus") or []
+        if not gpus:
+            self.gpu_list.set_visible(False)
+            self.live_meta.set_text(T("未检测到独显/核显遥测"))
+            return
+        self.gpu_list.set_visible(True)
+        seen = set()
+        for g in gpus:
+            name = str(g.get("name") or "GPU")[:28]
+            seen.add(name)
+            parts = [name]
+            if g.get("util_percent") is not None:
+                parts.append(f"{T('占用')} {g['util_percent']:.0f}%")
+            if g.get("core_mhz") is not None:
+                parts.append(f"{T('核心')} {g['core_mhz']:.0f} MHz")
+            if g.get("mem_mhz") is not None:
+                parts.append(f"{T('显存')} {g['mem_mhz']:.0f} MHz")
+            if g.get("vram_total_mb"):
+                parts.append(f"{T('显存')} {g.get('vram_used_mb') or 0}/{g['vram_total_mb']} MB")
+            if g.get("temp") is not None:
+                parts.append(f"{g['temp']:.0f}°C")
+            row = self._gpu_rows.get(name)
+            if row is None:
+                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                lbl = Gtk.Label(label=" · ".join(parts), xalign=0, ellipsize=3, hexpand=True)
+                lbl.add_css_class("hw-cap")
+                box.append(lbl)
+                self.gpu_list.append(box)
+                self._gpu_rows[name] = lbl
+            else:
+                row.set_text(" · ".join(parts))
+        for name in list(self._gpu_rows):
+            if name not in seen:
+                self._gpu_rows.pop(name)
+
     def update(self, st: dict):
         self._ensure_info()
+        self._update_live(st)
         freqs = st.get("freqs") or []
         if not freqs:
-            self.freq_meta.set_text("读不到 cpufreq 频率")
+            self.freq_meta.set_text(T("读不到 cpufreq 频率"))
             return
         if not self.freq_tiles:
             for i in range(len(freqs)):
@@ -1833,10 +2034,82 @@ class HwDash(Adw.Application):
                          flags=Gio.ApplicationFlags.FLAGS_NONE)
         self.pages: dict[str, Gtk.Widget] = {}
 
+    # -- 首次启动免责声明 ---------------------------------------------------
+    ACK_PATH = os.path.expanduser("~/.config/hw-dash/disclaimer-ack")
+
+    def _maybe_disclaimer(self, win):
+        """首次启动弹免责声明；确认后写入 ack 文件，之后不再打扰。"""
+        try:
+            if os.path.exists(self.ACK_PATH):
+                return
+        except Exception:
+            return
+        dlg = Adw.MessageDialog(
+            heading=T("使用前请阅读"),
+            body=T("本面板可以接管风扇转速、修改灯光状态。请知悉：\n\n"
+                 "· 风扇曲线 / 手动模式会接管散热 —— 请确保调速合理、温度监控正常；"
+                 "过热时硬件会降频甚至强制关机保护，但长期高温会加速老化\n"
+                 "· 本软件按现状提供，作者不对因使用或误用造成的任何硬件或数据问题负责\n"
+                 "· 电压 / 温度 / 频率等只读功能没有风险"),
+        )
+        dlg.add_response("quit", T("退出"))
+        dlg.add_response("ack", T("我已了解，继续使用"))
+        dlg.set_response_appearance("ack", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_close_response("ack")
+        dlg.set_transient_for(win)
+
+        def on_resp(_d, resp):
+            if resp == "quit":
+                os._exit(0)
+            try:
+                os.makedirs(os.path.dirname(self.ACK_PATH), exist_ok=True)
+                with open(self.ACK_PATH, "w", encoding="utf-8") as fh:
+                    fh.write(time.strftime("%Y-%m-%dT%H:%M:%S"))
+            except OSError:
+                pass
+
+        dlg.connect("response", on_resp)
+        dlg.present()
+
+    def _build_pages(self, stack):
+        for name, title, icon in (("temp", T("温度"), "temperature-symbolic"),
+                                  ("fan", T("风扇"), "fan-symbolic"),
+                                  ("volt", T("电压"), "speedometer-symbolic"),
+                                  ("info", T("信息"), "computer-symbolic"),
+                                  ("color", T("灯光"), "applications-graphics-symbolic")):
+            page = {"temp": TempPage, "fan": FanPage, "volt": VoltPage,
+                    "info": InfoPage, "color": ColorPage}[name]()
+            page.set_margin_top(12)
+            page.set_margin_bottom(12)
+            page.set_margin_start(12)
+            page.set_margin_end(12)
+            stack.add_titled_with_icon(page, name, title, icon)
+            self.pages[name] = page
+        stack.connect("notify::visible-child", self._stack_changed)
+
+    def _toggle_lang(self, *_a):
+        set_lang("en" if current_lang() == "zh" else "zh")
+        if getattr(self, "_lang_btn", None):
+            self._lang_btn.set_label(_lang_btn_label())
+        stack = self._stack
+        for name in list(self.pages):
+            p = self.pages.pop(name)
+            stack.remove(p)
+        self._build_pages(stack)
+        stack.set_visible_child(self.pages["temp"])
+        win = getattr(self, "win", None)
+        if win is not None:
+            win.set_title(T("硬件面板"))
+        try:
+            self.pages["color"].refresh()
+        except Exception:
+            pass
+
     def do_activate(self):
         GLib.set_prgname("hwdash")
-        win = Adw.ApplicationWindow(application=self, title="硬件面板")
+        win = Adw.ApplicationWindow(application=self, title=T("硬件面板"))
         win.set_icon_name("org.hwdash.Panel")
+        self._maybe_disclaimer(win)
         # 默认窗口 = 主屏的 72%（宽高比与分辨率天然一致）；最小尺寸也按屏幕
         # 收缩，任何分辨率下都完整可见。GTK 窗口本身支持拖边自由缩放。
         geo = None
@@ -1875,23 +2148,16 @@ class HwDash(Adw.Application):
         header = Adw.HeaderBar()
         stack = Adw.ViewStack(vexpand=True)
         self.stack = stack
-        for name, title, icon in (("temp", "温度", "temperature-symbolic"),
-                                  ("fan", "风扇", "fan-symbolic"),
-                                  ("volt", "电压", "speedometer-symbolic"),
-                                  ("info", "信息", "computer-symbolic"),
-                                  ("color", "灯光", "applications-graphics-symbolic")):
-            page = {"temp": TempPage, "fan": FanPage, "volt": VoltPage,
-                    "info": InfoPage, "color": ColorPage}[name]()
-            page.set_margin_top(12)
-            page.set_margin_bottom(12)
-            page.set_margin_start(12)
-            page.set_margin_end(12)
-            stack.add_titled_with_icon(page, name, title, icon)
-            self.pages[name] = page
-        stack.connect("notify::visible-child", self._stack_changed)
+        self._build_pages(stack)
 
         switch = Adw.ViewSwitcher(stack=stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         header.set_title_widget(switch)
+        lang_btn = Gtk.Button(label=_lang_btn_label())
+        lang_btn.add_css_class("flat")
+        lang_btn.set_tooltip_text("切换界面语言 / Switch UI language")
+        lang_btn.connect("clicked", self._toggle_lang)
+        header.pack_end(lang_btn)
+        self._lang_btn = lang_btn
         tv.add_top_bar(header)
         tv.set_content(stack)
 
@@ -1924,8 +2190,8 @@ class HwDash(Adw.Application):
             self.banner.set_revealed(False)
         else:
             self.banner.set_title(
-                "守护进程未运行 —— 只读模式（风扇与灯光不可调）。"
-                "启动：sudo systemctl start hwdashd")
+                T("守护进程未运行 —— 只读模式（风扇与灯光不可调）。")
+                + T("启动：sudo systemctl start hwdashd"))
             self.banner.set_revealed(True)
         self.pages["temp"].update(st)
         self.pages["fan"].update(st)
@@ -2097,9 +2363,9 @@ class VoltPage(Gtk.Box):
         card2.append(self.chart)
 
         # ---- 轨道列表
-        group = Adw.PreferencesGroup(
-            title="主板电压轨道",
-            description="it8628 ADC · 复用 voltmon 采集 · force_id 顶替型号时报警位不可信")
+        self.rail_group = group = Adw.PreferencesGroup(
+            title=T("主板电压轨道"),
+            description=T("主板 Super-I/O ADC · 与基准测试台同源 · 报警位可能不可信"))
         self.rail_list = Gtk.ListBox()
         self.rail_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.rail_list.add_css_class("boxed-list")
@@ -2138,7 +2404,7 @@ class VoltPage(Gtk.Box):
         if not cores:
             self.max_lbl.set_text("—")
             err = summary.get("error")
-            self.vmeta.set_text(f"每核心电压不可用：{err}" if err else "没有可用的 MSR 读数")
+            self.vmeta.set_text(f"{T('每核心电压不可用')}：{err}" if err else T("没有可用的 MSR 读数"))
             return
         if not self._tiles_built:
             self._build_tiles(cores)
@@ -2217,6 +2483,15 @@ class VoltPage(Gtk.Box):
         volts = st.get("voltages") or {}
         self._update_cores(volts.get("cores") or [], volts)
         self._update_rails(volts.get("rails") or [])
+        # 泛化：每核心电压仅 Intel（MSR 0x198 语义）；错误信息原样呈现，
+        # 同时用实际芯片名替换硬编码描述。
+        err = volts.get("error")
+        chip = next((r.get("chip") for r in volts.get("rails") or [] if r.get("chip")), "")
+        if err:
+            self.rail_group.set_description(f"⚠ {err}")
+        else:
+            base = f"{chip} ADC · " if chip else T("主板 Super-I/O ADC · ")
+            self.rail_group.set_description(base + T("与基准测试台同源 · 报警位可能不可信"))
 
 
 

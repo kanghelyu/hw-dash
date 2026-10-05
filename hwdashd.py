@@ -219,6 +219,7 @@ class Engine:
                 "fans": fans,
                 "voltages": self.voltages(),
                 "freqs": hwhw.cpu_freqs_mhz(),
+                "live": hwhw.read_live(),
                 "rgb": {"ok": self.rgb_ok, "error": self.rgb_error},
             }
 
