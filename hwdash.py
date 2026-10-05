@@ -2085,13 +2085,12 @@ class HwDash(Adw.Application):
             page.set_margin_end(12)
             stack.add_titled_with_icon(page, name, title, icon)
             self.pages[name] = page
-        stack.connect("notify::visible-child", self._stack_changed)
 
     def _toggle_lang(self, *_a):
         set_lang("en" if current_lang() == "zh" else "zh")
         if getattr(self, "_lang_btn", None):
             self._lang_btn.set_label(_lang_btn_label())
-        stack = self._stack
+        stack = self.stack
         for name in list(self.pages):
             p = self.pages.pop(name)
             stack.remove(p)
@@ -2149,6 +2148,7 @@ class HwDash(Adw.Application):
         stack = Adw.ViewStack(vexpand=True)
         self.stack = stack
         self._build_pages(stack)
+        stack.connect("notify::visible-child", self._stack_changed)
 
         switch = Adw.ViewSwitcher(stack=stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         header.set_title_widget(switch)
