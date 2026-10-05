@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=硬件面板
+Comment=温度曲线 · 风扇调速 · 灯光控制
+Exec=/home/YOUR_USER/.local/bin/hw-dash
+Icon=org.hwdash.Panel
+Terminal=false
+Categories=System;Monitor;Utility;
+StartupWMClass=org.hwdash.Panel

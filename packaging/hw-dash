@@ -1,0 +1,16 @@
+#!/bin/sh
+# 硬件面板启动器 —— 从脚本自身位置推导家目录，不依赖调用时的 $HOME
+# stderr 持久捕获到 ~/.cache/hwdash-crash.log：faulthandler 的 segfault
+# Python 栈、GTK 警告、traceback 全部落盘，闪退后直接取证
+self=$(readlink -f "$0" 2>/dev/null || echo "$0")
+BIN_DIR=$(cd "$(dirname "$self")" && pwd)
+HOME_DIR=$(dirname "$(dirname "$BIN_DIR")")
+LOG="$HOME_DIR/.cache/hwdash-crash.log"
+mkdir -p "$(dirname "$LOG")"
+{
+  echo "===== $(date '+%F %T') 启动 pid=$$ ====="
+  /usr/bin/python3 "$HOME_DIR/Applications/hw-dash/hwdash.py" "$@" 2>&1
+  rc=$?
+  echo "===== 退出 rc=$rc ====="
+} >> "$LOG"
+exit 0

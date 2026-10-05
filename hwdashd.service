@@ -1,0 +1,23 @@
+[Unit]
+Description=hw-dash 硬件面板守护进程（温度监测 / 风扇曲线 / 灯光）
+After=multi-user.target
+
+[Service]
+Type=simple
+Environment=HWDASH_USER_HOME=/home/YOUR_USER
+Environment=HWDASH_USER_UID=1000
+ExecStart=/usr/bin/python3 -u /home/YOUR_USER/Applications/hw-dash/hwdashd.py
+Restart=always
+RestartSec=2
+# 收到 SIGTERM 时守护进程会主动把 PWM 寄存器还原成 BIOS 的值，给足时间
+KillSignal=SIGTERM
+TimeoutStopSec=15
+# 它是本机唯一的 PWM 写者；CoolerControl 必须让位（见 install.sh）
+RuntimeDirectory=hw-dash
+StateDirectory=hw-dash
+ProtectHome=no
+# 不需要这些，别让守护进程被限制后写不进 sysfs
+ReadWritePaths=/sys/class/hwmon /etc/hw-dash /run/hw-dash
+
+[Install]
+WantedBy=multi-user.target
