@@ -507,9 +507,17 @@ class TempPage(Gtk.Box):
         self.legend.set_row_spacing(4)
         self.legend.set_halign(Gtk.Align.FILL)
         card.append(self.legend)
-        self.append(card)
 
-        # ---- 传感器列表
+        # ---- 整页限宽 + 滚动容器：没有滚动容器时，窗口最小高度会被全部
+        # 传感器行的自然高度顶死（几百上千 px），窗口高度就"拉不矮"了。
+        self.wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.wrap.append(card)
+        sc = Gtk.ScrolledWindow(vexpand=True)
+        sc.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        sc.set_child(self.wrap)
+        self.append(sc)
+
+        # ---- 传感器列表（放进 wrap，随页滚动）
         group = Adw.PreferencesGroup(title="传感器",
                                      description=T("点击行或图例芯片可切换该路曲线的显示"))
         self.listbox = Gtk.ListBox()
@@ -518,7 +526,7 @@ class TempPage(Gtk.Box):
         group.add(self.listbox)
         clamp = Adw.Clamp(maximum_size=940, tightening_threshold=880)
         clamp.set_child(group)
-        self.append(clamp)
+        self.wrap.append(clamp)
 
     def _toggle(self, key: str, on: bool):
         if on:
